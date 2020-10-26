@@ -804,7 +804,7 @@ func getreruntotalbuildcycleduration(buildN string) int {
 						fmt.Fprintf(outW, "\n\t\t\t%s \t%5d \t%5d \t%5d \t%3d%% \t%4d \t%4d \t%4d \t%4d \t%4dhrs:%2dmins \t%3d \t%3d \t%3d \t%3d \t%3d \t%s \t%s \t%s \t%s \t%s \t%s \t%s \t%s \t%s",
 							key, totalTestCount, totalFailCount, totalPassCount, totalPassRate, totalAborted, totalFailed, totalUnstable, totalSuccess, int64(hours), int64(mins), totalComps, totalJobs,
 							totalRuns, totalReruns, reranJobCount, start0, end0, clockTime0, start1, end1, clockTime, start2, end2, clockTime2)
-						fmt.Fprintf(outWCsv, "%d,%s,%d,%d,%s,%d,%d,%d,%d%%,%d,%d,%d,%d,%dhrs:%dmins,%d,%d,%d,%d,%d,%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
+						fmt.Fprintf(outWCsv, "%d,%s,%d,%d,%s,%d,%d,%d,%d%%,%d,%d,%d,%d,%dhrs:%dmins,%d,%d,%d,%d,%d,0%,0hrs:0mins,%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
 							(sno), cbbuild, result.Results[i].TotalCount, result.Results[i].FailCount, key, totalTestCount, totalFailCount, totalPassCount, totalPassRate, totalAborted, totalFailed, totalUnstable, totalSuccess, int64(hours), int64(mins), totalComps, totalJobs,
 							totalRuns, totalReruns, reranJobCount, start0, end0, clockTime0, start1, end1, clockTime, start2, end2, clockTime2)
 					}
