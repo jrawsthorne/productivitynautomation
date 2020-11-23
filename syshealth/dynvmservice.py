@@ -110,6 +110,35 @@ def check_vms(os_name, hosts):
     return True
 
 
+def create_vms_single_host(all_or_none: bool, checkvms: bool, xhostref: str, os_name: str, username: str, vm_count: int,
+                                       cpus: int, maxmemory: int, expiry_minutes: int,
+                                       output_format: str, start_suffix: int = 0):
+    try:              
+        vms_ips_list = perform_service(xhostref, 'createvm', os_name, username, vm_count,
+                                            cpus=cpus, maxmemory=maxmemory, expiry_minutes=expiry_minutes,
+                                            output_format=output_format, start_suffix=start_suffix)
+        if isinstance(vms_ips_list, str):
+            raise Exception(vms_ips_list)
+        if checkvms:
+            ips_to_check = vms_ips_list
+            if output_format == "detailed":
+                ips_to_check = list(vms_ips_list.values())
+            vms_ok = check_vms(os_name, ips_to_check)
+            log.info("VM check: " + str(vms_ok))
+            if not vms_ok:
+                raise Exception("Error: VM check failed")
+        return vms_ips_list
+    except Exception as e:
+        if all_or_none:
+            try:
+                perform_service(xhostref, 'deletevm', os_name, username, vm_count,
+                                        cpus=cpus, maxmemory=maxmemory, expiry_minutes=expiry_minutes,
+                                        output_format=output_format)
+            except Exception:
+                pass
+        raise e
+
+
 # /getservers/username?count=number&os=centos&ver=6&expiresin=30&checkvms=true
 @app.route('/getservers/<string:username>')
 def getservers_service(username):
@@ -144,21 +173,18 @@ def getservers_service(username):
     else:
         checkvms = False
 
+    if request.args.get('allornone'):
+        all_or_none = request.args.get('allornone').lower() == "true"
+    else:
+        all_or_none = False
+
     xhostref = None
     if request.args.get('xhostref'):
         xhostref = request.args.get('xhostref')
     reserved_count += vm_count
     if xhostref:
         log.info("-->  VMs on given xenhost" + xhostref)
-        vms_ips_list = perform_service(xhostref, 'createvm', os_name, username, vm_count,
-                                       cpus=cpus_count, maxmemory=mem, expiry_minutes=exp,
-                                       output_format=output_format)
-        if checkvms:
-            vms_ok = check_vms(os_name, vms_ips_list)
-            log.info("VM check: " + str(vms_ok))
-            if not vms_ok:
-                return "Error: VM check failed"
-        return json.dumps(vms_ips_list)
+        return json.dumps(create_vms_single_host(all_or_none, checkvms, xhostref, os_name, username, vm_count, cpus_count, mem, exp, output_format))
 
     # TBD consider cpus/mem later
     count, available_counts, xen_hosts_available_refs = get_all_available_count(os_name)
@@ -173,17 +199,11 @@ def getservers_service(username):
             break
     if free_xenhost_ref != 0:  # Full set of VMs on one xen host
         log.info("-->  VMs on single xenhost")
-        vms_ips_list = perform_service(free_xenhost_ref, 'createvm', os_name, username, vm_count,
-                                       cpus=cpus_count, maxmemory=mem, expiry_minutes=exp,
-                                       output_format=output_format)
-        if checkvms:
-            vms_ok = check_vms(os_name, vms_ips_list)
-            log.info("VM check: " + str(vms_ok))
-            if not vms_ok:
-                return "Error: VM check failed"
-        return json.dumps(vms_ips_list)
+        return json.dumps(create_vms_single_host(all_or_none, checkvms, free_xenhost_ref, os_name, username, vm_count, cpus_count, mem, exp, output_format))
+
     else:  # Distribute among multiple xen hosts
         log.info("--> Distributing VMs among multiple xen hosts")
+        names_by_xhost = {}
         need_vms = vm_count
         merged_vms_list = []
         vm_name_suffix_index = 0
@@ -205,21 +225,34 @@ def getservers_service(username):
                     username1 = username + str(vm_name_suffix_index+1)
                 else:
                     username1 = username
-                per_xen_host_res = perform_service(free_xenhost_ref, 'createvm', os_name, username1,
-                                                   per_xen_host_vms, cpus=cpus_count, maxmemory=mem,
-                                                   expiry_minutes=exp, output_format=output_format,
-                                                   start_suffix=vm_name_suffix_index)
-                for ip in per_xen_host_res:
-                    merged_vms_list.append(ip)
-                log.info(per_xen_host_res)
-                vm_name_suffix_index = int(vm_name_suffix_index) + int(per_xen_host_vms)
-                need_vms = need_vms - per_xen_host_vms
+                try:
+                    per_xen_host_res = create_vms_single_host(all_or_none, checkvms, free_xenhost_ref, os_name, username1, per_xen_host_vms, cpus_count, mem, exp, output_format, start_suffix=vm_name_suffix_index)
+                    
+                    for ip in per_xen_host_res:
+                        merged_vms_list.append(ip)
+                    log.info(per_xen_host_res)
+                    vm_name_suffix_index = int(vm_name_suffix_index) + int(per_xen_host_vms)
+                    need_vms = need_vms - per_xen_host_vms
 
-        if checkvms:
-            vms_ok = check_vms(os_name, merged_vms_list)
-            log.info("VM check: " + str(vms_ok))
-            if not vms_ok:
-                return "Error: VM check failed"
+                    names_by_xhost[index] = {
+                        "count": per_xen_host_vms,
+                        "start_suffix": vm_name_suffix_index
+                    }
+
+                except Exception as e:
+                    if all_or_none:
+                        # delete any created on current xhost
+                        perform_service(xen_host_ref=free_xenhost_ref, service_name='deletevm', vm_prefix_names=username1, number_of_vms=per_xen_host_vms)
+                        # delete any created on previous xhosts
+                        for [ref, xhost] in names_by_xhost.items():
+                            if xhost['count'] == 1:
+                                # delete username + xhost['start_suffix'] + 1
+                                username1 = username + str(xhost['start_suffix']+1)
+                                perform_service(xen_host_ref=ref, service_name='deletevm', vm_prefix_names=username1, number_of_vms=1)
+                            else:
+                                # delete username with start_suffix of xhost['start_suffix']
+                                perform_service(xen_host_ref=ref, service_name='deletevm', vm_prefix_names=username, number_of_vms=xhost['count'], start_suffix=xhost['start_suffix'])
+                    raise e
 
         if output_format == 'detailed':
             return json.dumps(merged_vms_list, indent=2, sort_keys=True)
