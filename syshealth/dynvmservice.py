@@ -831,12 +831,17 @@ def get_all_available_count(os="centos"):
         xname = xen_hosts[index]['name']
         log.info(xname +' --> index: ' + xname[7:])
         xen_host_index = int(xname[7:])
-        xsession = get_xen_session(xen_host_index, os)
-        xcount = get_available_count(xsession, os, xen_hosts[index])
-        available_counts.append(xcount)
-        xen_hosts_available_refs.append(str(xen_host_index) + ":" + str(xcount))
-        count += xcount
-        xsession.logout()
+        try:
+            xsession = get_xen_session(xen_host_index, os)
+            xcount = get_available_count(xsession, os, xen_hosts[index])
+        except Exception as e:
+            log.warning(str(e))
+            continue
+        else:
+            available_counts.append(xcount)
+            xen_hosts_available_refs.append(str(xen_host_index) + ":" + str(xcount))
+            count += xcount
+            xsession.logout()
     return count, available_counts, xen_hosts_available_refs
 
 
