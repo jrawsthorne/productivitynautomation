@@ -119,6 +119,9 @@ def create_vms_single_host(all_or_none: bool, checkvms: bool, xhostref: str, os_
                                             output_format=output_format, start_suffix=start_suffix)
         if isinstance(vms_ips_list, str):
             raise Exception(vms_ips_list)
+        # if there was an error, two entries are added to vms_ips_list
+        if len(vms_ips_list) != vm_count:
+            raise Exception("error while creating a vm")
         if checkvms:
             ips_to_check = vms_ips_list
             if output_format == "detailed":
