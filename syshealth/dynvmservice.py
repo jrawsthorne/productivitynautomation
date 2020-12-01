@@ -179,7 +179,7 @@ def getservers_service(username):
     if request.args.get('allornone'):
         all_or_none = request.args.get('allornone').lower() == "true"
     else:
-        all_or_none = False
+        all_or_none = True
 
     xhostref = None
     if request.args.get('xhostref'):
