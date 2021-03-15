@@ -1,11 +1,9 @@
-from prometheus_client.core import GaugeMetricFamily, CounterMetricFamily, REGISTRY
-import time
-from prometheus_client import start_http_server, Counter, Gauge, Summary, Histogram
 from couchbase.cluster import Cluster, ClusterOptions
 from couchbase.auth import PasswordAuthenticator
 from couchbase.options import LockMode
 import logging
 import json
+from flask import Flask, Response
 
 log = logging.getLogger("exporter")
 logging.basicConfig(
@@ -25,51 +23,33 @@ for [cluster_name, options] in settings['clusters'].items():
                                          ClusterOptions(
             PasswordAuthenticator(options['username'], options['password'])),
             lockmode=LockMode.WAIT)
-        log.info("Connected to %s", options['host'])
+        log.info("Connected to {}".format(options['host']))
 
 log.info("Connected to clusters")
 
-
-class CouchbaseQueryCollector():
-    def __init__(self, cluster, name, description, query, value_key, labels=[]):
-        self.cluster = cluster
-        self.query = query
-        self.name = name
-        self.description = description
-        self.labels = labels
-        self.value_key = value_key
-
-    def collect(self):
-        log.debug("Collecting metrics for %s", self.name)
-
-        g = GaugeMetricFamily(
-            self.name, self.description, labels=self.labels)
-
-        try:
-            rows = clusters[self.cluster].query(self.query).rows()
-
-            for row in rows:
-                g.add_metric([row[label]
-                              for label in self.labels], row[self.value_key])
-
-        except Exception as e:
-            log.warn("Error while collecting %s: %s", self.name, e)
-            pass
-
-        yield g
-
+app = Flask(__name__)
 
 for options in settings['queries']:
+    log.info("Registered metrics collection for {}".format(options['name']))
 
-    REGISTRY.register(CouchbaseQueryCollector(
-        options['cluster'], options['name'], options['description'], options['query'], options['value_key'], options['labels']))
+@app.route("/metrics")
+def metrics():
+    metrics = []
+    for options in settings["queries"]:
+        log.debug("Collecting metrics for {}".format(options["name"]))
+        try:
+            rows = clusters[options["cluster"]].query(options["query"]).rows()
+            for row in rows:
+                if len(options["labels"]) > 0:
+                    labels = ["{}=\"{}\"".format(label, row[label]) for label in options["labels"]]
+                    metrics.append("{}{{{}}} {}".format(options["name"], ",".join(labels), row[options["value_key"]]))
+                else:
+                    metrics.append("{} {}".format(options["name"], row[options["value_key"]]))
+        except Exception as e:
+            log.warning("Error while collecting {}: {}".format(options["name"], e))
+    return Response("\n".join(metrics), mimetype="text/plain")
 
-    log.info("Registered metrics collection for %s", options['name'])
 
-
-start_http_server(8000)
-
-log.info("Started HTTP server on port 8000")
-
-while True:
-    time.sleep(1000)
+if __name__ == "__main__":
+    log.info("Started HTTP server on port 8000")
+    app.run(host="0.0.0.0", port=8000)
