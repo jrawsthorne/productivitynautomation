@@ -185,8 +185,31 @@ var requiredStates string
 var component string
 var jobNameRegex *regexp.Regexp
 
+func readRerunCsv() map[string]int {
+	file, err := os.Open("reruns.csv")
+	if err != nil {
+		fmt.Println(err)
+	}
+	reader := csv.NewReader(file)
+	records, _ := reader.ReadAll()
+
+	var lastBuild = make(map[string]int)
+
+	for _, record := range records {
+		jobName := record[1]
+		buildUrlParts := strings.Split(record[2], "/")
+		buildId, _ := strconv.Atoi(buildUrlParts[len(buildUrlParts)-1])
+
+		lastBuildId, exists := lastBuild[jobName]
+		if !exists || exists && buildId > lastBuildId {
+			lastBuild[jobName] = buildId
+		}
+	}
+
+	return lastBuild
+}
+
 func main() {
-	fmt.Println("*** Helper Tool ***")
 	action := flag.String("action", "usage", usage())
 	srcInput := flag.String("src", "cbserver", usage())
 	destInput := flag.String("dest", "local", usage())
@@ -570,7 +593,7 @@ func getreruntotalbuildcycleduration(buildN string) int {
 	fmt.Fprintln(outW, "S.No.\tBuild\t\tOS\tTC\tFC\tPC\tSC\tRate\tAborted,Failed,Unstable,Succ\tTotalTime\t#Comp\t#Jobs\t#Runs\t#Reruns\t#RerunJobs RerunRate\tRerunTime")
 	fmt.Fprintln(outW, "-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
 
-	fmt.Fprintln(outWCsv, "S.No.,Build,GrandTC,GrandFC,OS,TC,FC,PC,SC,Rate,Aborted,Failed,Unstable,Succ,TotalTime(hrs),FreshTotalTime(hrs),#Comp,#Jobs,#FreshJobs,#Runs,#FreshRuns,#Reruns,#RerunJobs,RerunRate,RerunTime(hrs)")
+	fmt.Fprintln(outWCsv, "S.No.,Build,GrandTC,GrandFC,OS,TC,FC,PC,SC,Rate,Aborted,Failed,Unstable,Succ,TotalTime(hrs),FreshTotalTime(hrs),#Comp,#Jobs,#FreshJobs,#Runs,#FreshRuns,#Reruns,#RerunJobs,RerunRate,RerunTime(hrs),AutomatedHours,AutomatedRerunHours")
 
 	sno := 1
 	//for i := 0; i < len(cbbuilds); i++ {
@@ -581,7 +604,7 @@ func getreruntotalbuildcycleduration(buildN string) int {
 	//qry := "select numofjobs, totaltime, failcount, totalcount from (select count(*) as numofjobs, sum(duration) as totaltime, sum(failCount) as failcount, sum(totalCount) as totalcount from server b " +
 	//	"where lower(b.os) like \"" + cbplatform + "\" and b.`build`=\"" + cbbuild + "\" ) as result " + qryfilter + " limit " + finallimits
 	qry := "select `build`, totalCount, failCount, `type`, os as buildOS from greenboard b " +
-		"where  b.`build` like \"" + cbbuild + "%\" " + qryfilter + " order by `build` desc"
+		"where  b.`build` like \"" + cbbuild + "%\" " + qryfilter + " order by `build` desc limit 20"
 	//qry := "select `build`, numofjobs, totaltime, failcount, totalcount from (select b.`build`, count(*) as numofjobs, sum(duration) as totaltime, sum(failCount) as failcount, sum(totalCount) as totalcount from server b where lower(b.os) like "centos" and b.`build` like "6.5%" group by b.`build` order by b.`build` desc) as result where numofjobs>500 limit 30"
 	//fmt.Println("\nquery=" + qry)
 	localFileName := "duration.json"
@@ -600,6 +623,10 @@ func getreruntotalbuildcycleduration(buildN string) int {
 	var result RerunTotalCycleTimeQryResult
 
 	err = json.Unmarshal(byteValue, &result)
+
+	lastBuild := readRerunCsv()
+
+	fmt.Println(lastBuild)
 
 	//if len(result.Results) < 1 {
 	//	continue
@@ -625,7 +652,9 @@ func getreruntotalbuildcycleduration(buildN string) int {
 				totalComps := 0
 				totalSkipCount := 0
 				var totalRerunOnlyDuration int64
+				var totalAutomatedRerunOnlyDuraton int64
 				var totalGrandDuration int64
+				var totalAutomatedGrandDuration int64
 				var totalDuration int64
 				var reranJobsList string
 				for key1, value1 := range value {
@@ -649,6 +678,34 @@ func getreruntotalbuildcycleduration(buildN string) int {
 						rerunCount := len(tests)
 						if rerunCount == 0 {
 							continue
+						}
+						// sort tests by build id
+						sort.Slice(tests, func(i, j int) bool {
+							return tests[i].Build_ID < tests[j].Build_ID
+						})
+						lastBuildId, exists := lastBuild[key2]
+						lastAutomatedTest := -1
+						for i, test := range tests {
+							lastAutomatedTest = i
+							if exists && test.Build_ID > int64(lastBuildId) {
+								break
+							}
+						}
+						if rerunCount > 1 {
+							reranJobCount++
+							reranJobsList += fmt.Sprintf("\n\t%d. %s: %s -- %d ", reranJobCount, key1, key2, (rerunCount - 1))
+							for i := 1; i < len(tests); i++ {
+								totalRerunOnlyDuration += tests[i].Duration
+								if i <= lastAutomatedTest {
+									totalAutomatedRerunOnlyDuraton += tests[i].Duration
+								}
+							}
+						}
+						for i := 0; i < len(tests); i++ {
+							totalGrandDuration += tests[i].Duration
+							if i <= lastAutomatedTest {
+								totalAutomatedGrandDuration += tests[i].Duration
+							}
 						}
 						var bestRun TestResult = tests[0]
 						for i := range tests {
@@ -713,6 +770,9 @@ func getreruntotalbuildcycleduration(buildN string) int {
 				rerunMins := math.Floor(float64(rerunSecs) / 60 / 1000)
 				//totalRerunMins := math.Floor(float64(totalRerunOnlyDuration) / 1000 / 60)
 
+				automatedHours := float64(totalAutomatedGrandDuration) / 1000 / 60 / 60
+				automatedRerunHours := float64(totalAutomatedRerunOnlyDuraton) / 1000 / 60 / 60
+
 				freshTotalRuns := totalRuns - totalReruns
 				freshTotaltime := hours - rerunHours
 				freshTotalJobs := totalJobs - reranJobCount
@@ -744,9 +804,9 @@ func getreruntotalbuildcycleduration(buildN string) int {
 					//fmt.Fprintf(outWCsv, "%d,%s,%d,%d,%s,%d,%d,%d,%d%%,%d,%d,%d,%d,%dhrs:%dmins,%d,%d,%d,%d,%d,%d%%,%dhrs:%dmins\n",
 					//	(sno), cbbuild, result.Results[i].TotalCount, result.Results[i].FailCount, key, totalTestCount, totalFailCount, totalPassCount, totalPassRate, totalAborted, totalFailed, totalUnstable, totalSuccess, int64(hours), int64(mins), totalComps, totalJobs,
 					//	totalRuns, totalReruns, reranJobCount, rerunsRate, int64(rerunHours), int64(rerunMins))
-					fmt.Fprintf(outWCsv, "%d,%s,%d,%d,%s,%d,%d,%d,%d,%.2f,%d,%d,%d,%d,%.1f,%.1f,%d,%d,%d,%d,%d,%d,%d,%d,%.1f\n",
+					fmt.Fprintf(outWCsv, "%d,%s,%d,%d,%s,%d,%d,%d,%d,%.2f,%d,%d,%d,%d,%.1f,%.1f,%d,%d,%d,%d,%d,%d,%d,%d,%.1f,%.1f,%.1f\n",
 						(sno), cbbuild, result.Results[i].TotalCount, result.Results[i].FailCount, key, totalTestCount, totalFailCount, totalPassCount, totalSkipCount, totalPassRate, totalAborted, totalFailed, totalUnstable, totalSuccess, hours, freshTotaltime, totalComps, totalJobs, freshTotalJobs,
-						totalRuns, freshTotalRuns, totalReruns, reranJobCount, rerunsRate, rerunHours)
+						totalRuns, freshTotalRuns, totalReruns, reranJobCount, rerunsRate, rerunHours, automatedHours, automatedRerunHours)
 
 					sno++
 				}
