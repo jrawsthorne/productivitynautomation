@@ -14,7 +14,7 @@ services:
     image: grafana/grafana:8.0.1
     restart: unless-stopped
     volumes:
-      - ./config/grafana:/var/lib/grafana
+      - grafana_data:/var/lib/grafana
     environment:
       GF_INSTALL_PLUGINS: "simpod-json-datasource,marcusolsson-csv-datasource,ae3e-plotly-panel"
       GF_AUTH_ANONYMOUS_ENABLED: "true"
@@ -38,3 +38,6 @@ services:
     build: ../../exporter
     volumes:
       - ./config/queries.json:/app/queries.json
+
+volumes:
+  grafana_data:
