@@ -50,14 +50,14 @@ groups:
       #     description: "{{ $labels.ipaddr }} was last rebooted {{ $value }} days ago"
       #   labels:
       #     severity: "critical"
-      - alert: PoolVMSlowSSHResponseTime
-        expr: vm_health_ssh_resp_time > 10
-        for: 1m
-        annotations:
-          title: "Pool VM {{ $labels.ipaddr }} slow SSH response time"
-          description: "{{ $labels.ipaddr }} took {{ $value }} seconds to SSH"
-        labels:
-          severity: "critical"
+      # - alert: PoolVMSlowSSHResponseTime
+      #   expr: vm_health_ssh_resp_time > 10
+      #   for: 1m
+      #   annotations:
+      #     title: "Pool VM {{ $labels.ipaddr }} slow SSH response time"
+      #     description: "{{ $labels.ipaddr }} took {{ $value }} seconds to SSH"
+      #   labels:
+      #     severity: "critical"
       - alert: SlaveVMDown
         # Condition for alerting
         expr: slaves_vm_health_ssh_status == 0
