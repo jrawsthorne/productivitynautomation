@@ -63,6 +63,16 @@ config/queries.json for exporter.py
 config/targets.json for dashboad.py
 config/prometheus.yml for prometheus configuration (TODO: persistent prometheus storage for database)
 
+# Backup
+
+Use the Grafana Backup Tool [https://github.com/ysde/grafana-backup-tool](https://github.com/ysde/grafana-backup-tool) to backup grafana dashboards and datasources - follow the instructions in the README
+Everything else is stored in this repository directly. 
+
+# Restore
+
+Use the Grafana Backup Tool [https://github.com/ysde/grafana-backup-tool](https://github.com/ysde/grafana-backup-tool) and point it at the backup file stored in docker/*/config/*.tar.gz
+Everything else is stored in this repository directly. 
+
 # Using the API
 
 There are 2 relevant endpoints /add and /import.
