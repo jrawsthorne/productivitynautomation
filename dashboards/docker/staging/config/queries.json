@@ -732,14 +732,14 @@
       "csv": "mobile_vm_health",
       "description": "Mac Address Match State",
       "column": "mac_address_match",
-      "labels": ["ipaddr"]
+      "labels": ["ipaddr", "pool_ids", "pool_mac_address", "real_mac_address"]
     },
     {
       "name": "vm_health_mac_address_match",
       "csv": "vm_health",
       "description": "Mac Address Match State",
       "column": "mac_address_match",
-      "labels": ["ipaddr", "pool_ids"]
+      "labels": ["ipaddr", "pool_ids", "pool_mac_address", "real_mac_address"]
     },
     {
       "name": "slaves_vm_health_disk_size_data",

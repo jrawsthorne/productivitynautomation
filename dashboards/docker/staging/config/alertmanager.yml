@@ -10,7 +10,7 @@ route:
   repeat_interval: 24h
   receiver: "qe-infra-email"
   matchers:
-   - alertname =~ PoolVMDown|PoolVMOSMismatch|PoolVMHighDiskUsage|SlaveVMHighDiskUsage|SlaveVMHighDiskUsageData
+   - alertname =~ PoolVMDown|PoolVMOSMismatch|PoolVMHighDiskUsage|SlaveVMHighDiskUsage|SlaveVMHighDiskUsageData|PoolVMMACMismatch
 
 receivers:
   - name: "qe-infra-email"

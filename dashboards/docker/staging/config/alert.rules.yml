@@ -33,6 +33,14 @@ groups:
           description: "{{ $labels.ipaddr }} expected {{ $labels.pool_os }}, got {{ $labels.real_os }}"
         labels:
           severity: "critical"
+      - alert: PoolVMMACMismatch
+        expr: vm_health_mac_address_match == 0
+        for: 1m
+        annotations:
+          title: "Pool VM {{ $labels.ipaddr }} MAC mismatch"
+          description: "{{ $labels.ipaddr }} expected {{ $labels.pool_mac_address }}, got {{ $labels.real_mac_address }}"
+        labels:
+          severity: "critical"
       # - alert: PoolVMOverdueReboot
       #   expr: vm_health_booted_days > 60
       #   for: 1m
